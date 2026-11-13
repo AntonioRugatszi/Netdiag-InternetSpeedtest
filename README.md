@@ -2,7 +2,7 @@
 
 Cross-platform C++17 network diagnostics & internet speed test.
 
-**📱 Unofficial Android support via [Termux](https://termux.dev/)** — run the same binary on your phone with enhanced Wi-Fi details (signal strength, frequency, link speed) when using [Termux:API](https://github.com/termux/termux-api).
+**📱 Android support via [Termux](https://termux.dev/)** — run the same binary on your phone with enhanced Wi-Fi details (signal strength, frequency, link speed) when using [Termux:API](https://github.com/termux/termux-api).
 
 ## Features
 
@@ -19,22 +19,22 @@ g++ -std=c++17 -O2 -o netdiag netdiag.cpp -lcurl
 ./netdiag
 ```
 
-### Termux (Android) 📱
+### Termux (Android)
 ```bash
-# One-line install & run
-pkg install git clang libcurl termux-api && git clone https://github.com/AntonioRugatszi/Netdiagnosis-Glorified-Internet-Speedtest-.git && cd Netdiagnosis-Glorified-Internet-Speedtest- && ./build-termux.sh && ./netdiag
-
-# Or step by step
+# Install dependencies
+pkg update && pkg upgrade
 pkg install git clang libcurl termux-api
-git clone https://github.com/AntonioRugatszi/Netdiagnosis-Glorified-Internet-Speedtest-.git
-cd Netdiagnosis-Glorified-Internet-Speedtest-
+
+# Clone and build
+git clone https://github.com/AntonioRugatszi/Netdiag-InternetSpeedtest.git
+cd Netdiag-InternetSpeedtest
 ./build-termux.sh
 ./netdiag
 ```
 
 **For enhanced Wi-Fi info (SSID, signal strength, frequency, link speed, BSSID):**
 1. Install **Termux:API** app from [F-Droid](https://f-droid.org/packages/com.termux.api/) or Play Store
-2. Run: `pkg install termux-api`
+2. Run in Termux: `pkg install termux-api`
 3. Grant location permission when prompted by `termux-wifi-connectioninfo`
 
 > **Note:** Without Termux:API, the tool still works but falls back to standard Linux methods (limited Wi-Fi info on Android).

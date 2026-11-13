@@ -94,8 +94,6 @@ g++ -std=c++17 -O2 -o netdiag.exe netdiag.cpp -lcurl -lws2_32 -lwlanapi -lole32
 
 ---
 
-<<<<<<< HEAD
-=======
 ## Termux (Android)
 
 ### Install Dependencies
@@ -130,7 +128,6 @@ With Termux:API, netdiag shows:
 
 ---
 
->>>>>>> origin/termux-support
 ## Windows (MSVC / Visual Studio)
 
 ### Using vcpkg
@@ -221,6 +218,7 @@ Expected output shows:
 | Windows: `wlanapi.h` not found | Install Windows SDK or use MSYS2/MinGW-w64 |
 | Speed test fails | Check firewall, try different endpoints in code |
 | Permission denied on Linux | Some interfaces need root; run with `sudo` for full info |
+| Termux: SSID not detected | Install Termux:API app, grant location permission |
 
 ---
 
