@@ -94,6 +94,8 @@ g++ -std=c++17 -O2 -o netdiag.exe netdiag.cpp -lcurl -lws2_32 -lwlanapi -lole32
 
 ---
 
+<<<<<<< HEAD
+=======
 ## Termux (Android)
 
 ### Install Dependencies
@@ -128,6 +130,7 @@ With Termux:API, netdiag shows:
 
 ---
 
+>>>>>>> origin/termux-support
 ## Windows (MSVC / Visual Studio)
 
 ### Using vcpkg

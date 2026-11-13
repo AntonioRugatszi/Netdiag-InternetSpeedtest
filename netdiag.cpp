@@ -48,6 +48,8 @@
     #include <sys/types.h>
     #include <sys/socket.h>
     #include <sys/ioctl.h>
+    #include <sys/wait.h>   // for waitpid
+    #include <signal.h>     // for kill, SIGKILL
     #include <net/if.h>
     #include <netinet/in.h>
     #include <arpa/inet.h>
@@ -420,9 +422,72 @@ static NetworkInfo get_network_info_windows() {
 #else
 // Linux/macOS implementation using getifaddrs and system commands
 
+// Execute command with timeout (returns empty string if timeout)
+static std::string exec_command_timeout(const char* cmd, int timeout_seconds = 5) {
+    std::string result;
+    int pipefd[2];
+    if (pipe(pipefd) == -1) return result;
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return result;
+    }
+
+    if (pid == 0) {
+        // Child process
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDERR_FILENO);
+        close(pipefd[1]);
+        execl("/bin/sh", "sh", "-c", cmd, (char*)nullptr);
+        _exit(1);
+    }
+
+    // Parent process
+    close(pipefd[1]);
+
+    // Wait for child with timeout
+    auto start = std::chrono::steady_clock::now();
+    bool timed_out = false;
+    int status = 0;
+
+    while (true) {
+        pid_t result_pid = waitpid(pid, &status, WNOHANG);
+        if (result_pid == pid) break;  // Process finished
+
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now() - start).count();
+        if (elapsed >= timeout_seconds) {
+            timed_out = true;
+            kill(pid, SIGKILL);
+            waitpid(pid, &status, 0);
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    if (!timed_out) {
+        char buffer[128];
+        ssize_t bytes;
+        while ((bytes = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+            result.append(buffer, bytes);
+        }
+    }
+    close(pipefd[0]);
+
+    // Trim whitespace
+    size_t first = result.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) return "";
+    size_t last = result.find_last_not_of(" \t\n\r");
+    return result.substr(first, last - first + 1);
+}
+
 static std::string get_ssid_termux() {
     // Termux:API provides termux-wifi-connectioninfo (requires termux-api package)
-    std::string result = exec_command("termux-wifi-connectioninfo 2>/dev/null");
+    // Use 5-second timeout so it doesn't hang if app is broken/permission denied
+    std::string result = exec_command_timeout("termux-wifi-connectioninfo 2>/dev/null", 5);
     if (!result.empty()) {
         // Parse JSON output: {"ssid":"MyNetwork","bssid":"...","ip":"...","mac":"...",...}
         std::string ssid = json_extract(result, "ssid");
@@ -432,7 +497,8 @@ static std::string get_ssid_termux() {
 }
 
 static void get_termux_wifi_info(NetworkInfo& info) {
-    std::string result = exec_command("termux-wifi-connectioninfo 2>/dev/null");
+    // Use 5-second timeout so it doesn't hang if app is broken/permission denied
+    std::string result = exec_command_timeout("termux-wifi-connectioninfo 2>/dev/null", 5);
     if (result.empty()) return;
 
     info.ssid = json_extract(result, "ssid");
@@ -449,7 +515,7 @@ static void get_termux_wifi_info(NetworkInfo& info) {
 }
 
 static std::string get_ssid_linux() {
-    // Try Termux:API first (if running in Termux)
+    // Try Termux:API first (if running in Termux) - with 5s timeout
     std::string ssid = get_ssid_termux();
     if (!ssid.empty()) return ssid;
 
@@ -490,7 +556,7 @@ static std::string get_ssid_macos() {
 static NetworkInfo get_network_info_unix() {
     NetworkInfo info;
 
-    // Get Wi-Fi info via Termux:API first (works on Termux/Android)
+    // Get Wi-Fi info via Termux:API first (works on Termux/Android) - with 5s timeout
 #ifdef __linux__
     get_termux_wifi_info(info);
 #endif
