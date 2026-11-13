@@ -2,7 +2,7 @@
 
 Cross-platform C++17 network diagnostics & internet speed test.
 
- Android support via [Termux](https://termux.dev/)** — run the same binary on your phone with enhanced Wi-Fi details (signal strength, frequency, link speed) when using [Termux:API](https://github.com/termux/termux-api).
+ Android support via [Termux](https://termux.dev/) — run the same binary on your phone with enhanced Wi-Fi details (signal strength, frequency, link speed) when using [Termux:API](https://github.com/termux/termux-api).
 
 ## Features
 
