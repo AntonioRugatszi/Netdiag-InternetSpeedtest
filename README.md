@@ -2,19 +2,44 @@
 
 Cross-platform C++17 network diagnostics & internet speed test.
 
+**📱 Unofficial Android support via [Termux](https://termux.dev/)** — run the same binary on your phone with enhanced Wi-Fi details (signal strength, frequency, link speed) when using [Termux:API](https://github.com/termux/termux-api).
+
 ## Features
 
-- **Local Network**: Wi-Fi SSID, IPv4, MAC address, Machine ID (Linux)
+- **Local Network**: Wi-Fi SSID, IPv4, MAC address, Machine ID (Linux/Android)
 - **Public IP & ISP**: IP, provider, organization, AS number, geolocation (city/country/coordinates)
 - **Speed Test**: Download, upload, and latency (ping) via Cloudflare endpoints
+- **Android/Termux extras**: BSSID, RSSI (dBm), frequency (MHz), link speed (Mbps), Android device ID
 
 ## Quick Start
 
+### Linux / macOS / Windows
 ```bash
+g++ -std=c++17 -O2 -o netdiag netdiag.cpp -lcurl
 ./netdiag
 ```
 
-### Termux (Android)
+### Termux (Android) 📱
+```bash
+# One-line install & run
+pkg install git clang libcurl termux-api && git clone https://github.com/AntonioRugatszi/Netdiagnosis-Glorified-Internet-Speedtest-.git && cd Netdiagnosis-Glorified-Internet-Speedtest- && ./build-termux.sh && ./netdiag
+
+# Or step by step
+pkg install git clang libcurl termux-api
+git clone https://github.com/AntonioRugatszi/Netdiagnosis-Glorified-Internet-Speedtest-.git
+cd Netdiagnosis-Glorified-Internet-Speedtest-
+./build-termux.sh
+./netdiag
+```
+
+**For enhanced Wi-Fi info (SSID, signal strength, frequency, link speed, BSSID):**
+1. Install **Termux:API** app from [F-Droid](https://f-droid.org/packages/com.termux.api/) or Play Store
+2. Run: `pkg install termux-api`
+3. Grant location permission when prompted by `termux-wifi-connectioninfo`
+
+> **Note:** Without Termux:API, the tool still works but falls back to standard Linux methods (limited Wi-Fi info on Android).
+
+## Build from Source
 
 ```bash
 # One-line install & run
