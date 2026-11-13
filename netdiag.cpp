@@ -48,6 +48,8 @@
     #include <sys/types.h>
     #include <sys/socket.h>
     #include <sys/ioctl.h>
+    #include <sys/wait.h>   // for waitpid
+    #include <signal.h>     // for kill, SIGKILL
     #include <net/if.h>
     #include <netinet/in.h>
     #include <arpa/inet.h>
@@ -296,13 +298,10 @@ struct NetworkInfo {
     std::string local_ip = "N/A";
     std::string mac_address = "N/A";
     std::string interface_name = "N/A";
-<<<<<<< HEAD
-=======
     std::string bssid = "N/A";
     std::string frequency = "N/A";
     std::string signal_strength = "N/A";
     std::string link_speed = "N/A";
->>>>>>> origin/termux-support
     bool is_wifi = false;
 };
 
@@ -423,14 +422,72 @@ static NetworkInfo get_network_info_windows() {
 #else
 // Linux/macOS implementation using getifaddrs and system commands
 
-<<<<<<< HEAD
-static std::string get_ssid_linux() {
-    // Try iwgetid first (most common)
-    std::string ssid = exec_command("iwgetid -r 2>/dev/null");
-=======
+// Execute command with timeout (returns empty string if timeout)
+static std::string exec_command_timeout(const char* cmd, int timeout_seconds = 5) {
+    std::string result;
+    int pipefd[2];
+    if (pipe(pipefd) == -1) return result;
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return result;
+    }
+
+    if (pid == 0) {
+        // Child process
+        close(pipefd[0]);
+        dup2(pipefd[1], STDOUT_FILENO);
+        dup2(pipefd[1], STDERR_FILENO);
+        close(pipefd[1]);
+        execl("/bin/sh", "sh", "-c", cmd, (char*)nullptr);
+        _exit(1);
+    }
+
+    // Parent process
+    close(pipefd[1]);
+
+    // Wait for child with timeout
+    auto start = std::chrono::steady_clock::now();
+    bool timed_out = false;
+    int status = 0;
+
+    while (true) {
+        pid_t result_pid = waitpid(pid, &status, WNOHANG);
+        if (result_pid == pid) break;  // Process finished
+
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::steady_clock::now() - start).count();
+        if (elapsed >= timeout_seconds) {
+            timed_out = true;
+            kill(pid, SIGKILL);
+            waitpid(pid, &status, 0);
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    if (!timed_out) {
+        char buffer[128];
+        ssize_t bytes;
+        while ((bytes = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+            result.append(buffer, bytes);
+        }
+    }
+    close(pipefd[0]);
+
+    // Trim whitespace
+    size_t first = result.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) return "";
+    size_t last = result.find_last_not_of(" \t\n\r");
+    return result.substr(first, last - first + 1);
+}
+
 static std::string get_ssid_termux() {
     // Termux:API provides termux-wifi-connectioninfo (requires termux-api package)
-    std::string result = exec_command("termux-wifi-connectioninfo 2>/dev/null");
+    // Use 5-second timeout so it doesn't hang if app is broken/permission denied
+    std::string result = exec_command_timeout("termux-wifi-connectioninfo 2>/dev/null", 5);
     if (!result.empty()) {
         // Parse JSON output: {"ssid":"MyNetwork","bssid":"...","ip":"...","mac":"...",...}
         std::string ssid = json_extract(result, "ssid");
@@ -440,7 +497,8 @@ static std::string get_ssid_termux() {
 }
 
 static void get_termux_wifi_info(NetworkInfo& info) {
-    std::string result = exec_command("termux-wifi-connectioninfo 2>/dev/null");
+    // Use 5-second timeout so it doesn't hang if app is broken/permission denied
+    std::string result = exec_command_timeout("termux-wifi-connectioninfo 2>/dev/null", 5);
     if (result.empty()) return;
 
     info.ssid = json_extract(result, "ssid");
@@ -457,13 +515,12 @@ static void get_termux_wifi_info(NetworkInfo& info) {
 }
 
 static std::string get_ssid_linux() {
-    // Try Termux:API first (if running in Termux)
+    // Try Termux:API first (if running in Termux) - with 5s timeout
     std::string ssid = get_ssid_termux();
     if (!ssid.empty()) return ssid;
 
     // Try iwgetid first (most common)
     ssid = exec_command("iwgetid -r 2>/dev/null");
->>>>>>> origin/termux-support
     if (!ssid.empty()) return ssid;
 
     // Try nmcli
@@ -499,31 +556,17 @@ static std::string get_ssid_macos() {
 static NetworkInfo get_network_info_unix() {
     NetworkInfo info;
 
-<<<<<<< HEAD
-    // Get SSID
-=======
-    // Get Wi-Fi info via Termux:API first (works on Termux/Android)
+    // Get Wi-Fi info via Termux:API first (works on Termux/Android) - with 5s timeout
 #ifdef __linux__
     get_termux_wifi_info(info);
 #endif
 
     // Get SSID (fallback if Termux:API not available)
->>>>>>> origin/termux-support
 #ifdef __linux__
     std::string ssid = get_ssid_linux();
 #elif __APPLE__
     std::string ssid = get_ssid_macos();
 #endif
-<<<<<<< HEAD
-    if (!ssid.empty()) {
-        info.ssid = ssid;
-        info.is_wifi = true;
-    } else {
-        info.ssid = "N/A (Ethernet or unknown)";
-    }
-
-    // Get interface info via getifaddrs
-=======
     if (!ssid.empty() && info.ssid == "N/A (Ethernet or unknown)") {
         info.ssid = ssid;
         info.is_wifi = true;
@@ -532,7 +575,6 @@ static NetworkInfo get_network_info_unix() {
     }
 
     // Get interface info via getifaddrs (fallback for IP/MAC if Termux didn't provide)
->>>>>>> origin/termux-support
     struct ifaddrs* ifaddr = nullptr;
     if (getifaddrs(&ifaddr) == -1) return info;
 
@@ -646,19 +688,11 @@ static PublicInfo get_public_info() {
 }
 
 // ============================================================================
-<<<<<<< HEAD
-// Machine ID (Linux only - /etc/machine-id)
-=======
 // Machine ID (Linux/Android)
->>>>>>> origin/termux-support
 // ============================================================================
 
 static std::string get_machine_id() {
 #ifdef __linux__
-<<<<<<< HEAD
-    std::string id = exec_command("cat /etc/machine-id 2>/dev/null | head -c 32");
-    if (!id.empty()) return id;
-=======
     // Try Termux:API for Android ID (requires termux-api package)
     std::string result = exec_command("termux-telephony-deviceinfo 2>/dev/null");
     if (!result.empty()) {
@@ -674,16 +708,11 @@ static std::string get_machine_id() {
     id = exec_command("cat /etc/machine-id 2>/dev/null | head -c 32");
     if (!id.empty()) return id;
 
->>>>>>> origin/termux-support
     // Fallback to dbus machine-id
     id = exec_command("cat /var/lib/dbus/machine-id 2>/dev/null | head -c 32");
     return id.empty() ? "N/A" : id;
 #else
-<<<<<<< HEAD
-    return "N/A (Linux only)";
-=======
     return "N/A (Linux/Android only)";
->>>>>>> origin/termux-support
 #endif
 }
 
@@ -880,13 +909,10 @@ int main() {
     print_kv("Wi-Fi SSID", net.ssid);
     print_kv("Local IPv4 Address", net.local_ip);
     print_kv("MAC Address", net.mac_address);
-<<<<<<< HEAD
-=======
     if (net.is_wifi && net.bssid != "N/A") print_kv("BSSID", net.bssid);
     if (net.is_wifi && net.frequency != "N/A") print_kv("Frequency", net.frequency + " MHz");
     if (net.is_wifi && net.signal_strength != "N/A") print_kv("Signal Strength", net.signal_strength + " dBm");
     if (net.is_wifi && net.link_speed != "N/A") print_kv("Link Speed", net.link_speed + " Mbps");
->>>>>>> origin/termux-support
 
     std::string machine_id = get_machine_id();
     print_kv("Machine ID", machine_id);
@@ -946,11 +972,8 @@ int main() {
     std::cout << "  Public IP:    " << pub.public_ip << "\n";
     std::cout << "  ISP:          " << pub.isp << "\n";
     std::cout << "  Connection:   " << (net.is_wifi ? "Wi-Fi (" + net.ssid + ")" : "Ethernet") << "\n";
-<<<<<<< HEAD
-=======
     if (net.is_wifi && net.signal_strength != "N/A") std::cout << "  Signal:       " << net.signal_strength << " dBm\n";
     if (net.is_wifi && net.link_speed != "N/A") std::cout << "  Link Speed:   " << net.link_speed << " Mbps\n";
->>>>>>> origin/termux-support
     if (speed.download_ok) std::cout << "  Download:     " << format_speed_bps(speed.download_mbps * 1e6) << "\n";
     if (speed.upload_ok) std::cout << "  Upload:       " << format_speed_bps(speed.upload_mbps * 1e6) << "\n";
     if (speed.ping_ok) std::cout << "  Latency:      " << format_ms(speed.latency_ms) << "\n";
