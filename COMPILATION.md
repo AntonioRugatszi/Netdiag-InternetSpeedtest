@@ -94,6 +94,43 @@ g++ -std=c++17 -O2 -o netdiag.exe netdiag.cpp -lcurl -lws2_32 -lwlanapi -lole32
 
 ---
 
+<<<<<<< HEAD
+=======
+## Termux (Android)
+
+### Install Dependencies
+```bash
+pkg update && pkg install -y clang libcurl termux-api
+```
+
+### Compile
+```bash
+# Using clang (Termux default)
+clang++ -std=c++17 -O2 -o netdiag netdiag.cpp -lcurl
+
+# Or with the build script
+./build-termux.sh
+```
+
+### Run
+```bash
+./netdiag
+```
+
+### Enhanced Wi-Fi Info (requires Termux:API)
+1. Install **Termux:API** app from [F-Droid](https://f-droid.org/packages/com.termux.api/) or Play Store
+2. Run: `pkg install termux-api`
+3. Grant location permission when prompted
+
+With Termux:API, netdiag shows:
+- Wi-Fi SSID, BSSID
+- Signal strength (RSSI in dBm)
+- Frequency (MHz) and link speed (Mbps)
+- Android device ID (instead of machine-id)
+
+---
+
+>>>>>>> origin/termux-support
 ## Windows (MSVC / Visual Studio)
 
 ### Using vcpkg
