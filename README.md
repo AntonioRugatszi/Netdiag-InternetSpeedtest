@@ -14,6 +14,22 @@ Cross-platform C++17 network diagnostics & internet speed test.
 ./netdiag
 ```
 
+### Termux (Android)
+
+```bash
+# One-line install & run
+pkg install git clang libcurl && git clone https://github.com/yourusername/netdiag && cd netdiag && ./build-termux.sh && ./netdiag
+
+# Or with the build script
+./build-termux.sh
+./netdiag
+```
+
+**For enhanced Wi-Fi info (SSID, signal strength, frequency, etc.):**
+1. Install **Termux:API** app from [F-Droid](https://f-droid.org/packages/com.termux.api/) or Play Store
+2. Run: `pkg install termux-api`
+3. Grant location permission when prompted by `termux-wifi-connectioninfo`
+
 ## Build from Source
 
 ### Linux (Debian/Ubuntu)

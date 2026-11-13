@@ -296,6 +296,10 @@ struct NetworkInfo {
     std::string local_ip = "N/A";
     std::string mac_address = "N/A";
     std::string interface_name = "N/A";
+    std::string bssid = "N/A";
+    std::string frequency = "N/A";
+    std::string signal_strength = "N/A";
+    std::string link_speed = "N/A";
     bool is_wifi = false;
 };
 
@@ -416,9 +420,41 @@ static NetworkInfo get_network_info_windows() {
 #else
 // Linux/macOS implementation using getifaddrs and system commands
 
+static std::string get_ssid_termux() {
+    // Termux:API provides termux-wifi-connectioninfo (requires termux-api package)
+    std::string result = exec_command("termux-wifi-connectioninfo 2>/dev/null");
+    if (!result.empty()) {
+        // Parse JSON output: {"ssid":"MyNetwork","bssid":"...","ip":"...","mac":"...",...}
+        std::string ssid = json_extract(result, "ssid");
+        if (!ssid.empty() && ssid != "null") return ssid;
+    }
+    return "";
+}
+
+static void get_termux_wifi_info(NetworkInfo& info) {
+    std::string result = exec_command("termux-wifi-connectioninfo 2>/dev/null");
+    if (result.empty()) return;
+
+    info.ssid = json_extract(result, "ssid");
+    info.bssid = json_extract(result, "bssid");
+    info.frequency = json_extract(result, "frequency");
+    info.signal_strength = json_extract(result, "rssi");  // RSSI in dBm
+    info.link_speed = json_extract(result, "link_speed"); // Mbps
+    info.mac_address = json_extract(result, "mac");
+    info.local_ip = json_extract(result, "ip");
+
+    if (!info.ssid.empty() && info.ssid != "null") {
+        info.is_wifi = true;
+    }
+}
+
 static std::string get_ssid_linux() {
+    // Try Termux:API first (if running in Termux)
+    std::string ssid = get_ssid_termux();
+    if (!ssid.empty()) return ssid;
+
     // Try iwgetid first (most common)
-    std::string ssid = exec_command("iwgetid -r 2>/dev/null");
+    ssid = exec_command("iwgetid -r 2>/dev/null");
     if (!ssid.empty()) return ssid;
 
     // Try nmcli
@@ -454,20 +490,25 @@ static std::string get_ssid_macos() {
 static NetworkInfo get_network_info_unix() {
     NetworkInfo info;
 
-    // Get SSID
+    // Get Wi-Fi info via Termux:API first (works on Termux/Android)
+#ifdef __linux__
+    get_termux_wifi_info(info);
+#endif
+
+    // Get SSID (fallback if Termux:API not available)
 #ifdef __linux__
     std::string ssid = get_ssid_linux();
 #elif __APPLE__
     std::string ssid = get_ssid_macos();
 #endif
-    if (!ssid.empty()) {
+    if (!ssid.empty() && info.ssid == "N/A (Ethernet or unknown)") {
         info.ssid = ssid;
         info.is_wifi = true;
-    } else {
-        info.ssid = "N/A (Ethernet or unknown)";
+    } else if (info.ssid != "N/A (Ethernet or unknown)") {
+        info.is_wifi = true;
     }
 
-    // Get interface info via getifaddrs
+    // Get interface info via getifaddrs (fallback for IP/MAC if Termux didn't provide)
     struct ifaddrs* ifaddr = nullptr;
     if (getifaddrs(&ifaddr) == -1) return info;
 
@@ -581,18 +622,31 @@ static PublicInfo get_public_info() {
 }
 
 // ============================================================================
-// Machine ID (Linux only - /etc/machine-id)
+// Machine ID (Linux/Android)
 // ============================================================================
 
 static std::string get_machine_id() {
 #ifdef __linux__
-    std::string id = exec_command("cat /etc/machine-id 2>/dev/null | head -c 32");
+    // Try Termux:API for Android ID (requires termux-api package)
+    std::string result = exec_command("termux-telephony-deviceinfo 2>/dev/null");
+    if (!result.empty()) {
+        std::string id = json_extract(result, "device_id");
+        if (!id.empty() && id != "null") return id;
+    }
+
+    // Try Android ID via settings (works on rooted or Termux with permissions)
+    std::string id = exec_command("settings get secure android_id 2>/dev/null");
+    if (!id.empty() && id != "null") return id;
+
+    // Standard Linux machine-id
+    id = exec_command("cat /etc/machine-id 2>/dev/null | head -c 32");
     if (!id.empty()) return id;
+
     // Fallback to dbus machine-id
     id = exec_command("cat /var/lib/dbus/machine-id 2>/dev/null | head -c 32");
     return id.empty() ? "N/A" : id;
 #else
-    return "N/A (Linux only)";
+    return "N/A (Linux/Android only)";
 #endif
 }
 
@@ -789,6 +843,10 @@ int main() {
     print_kv("Wi-Fi SSID", net.ssid);
     print_kv("Local IPv4 Address", net.local_ip);
     print_kv("MAC Address", net.mac_address);
+    if (net.is_wifi && net.bssid != "N/A") print_kv("BSSID", net.bssid);
+    if (net.is_wifi && net.frequency != "N/A") print_kv("Frequency", net.frequency + " MHz");
+    if (net.is_wifi && net.signal_strength != "N/A") print_kv("Signal Strength", net.signal_strength + " dBm");
+    if (net.is_wifi && net.link_speed != "N/A") print_kv("Link Speed", net.link_speed + " Mbps");
 
     std::string machine_id = get_machine_id();
     print_kv("Machine ID", machine_id);
@@ -848,6 +906,8 @@ int main() {
     std::cout << "  Public IP:    " << pub.public_ip << "\n";
     std::cout << "  ISP:          " << pub.isp << "\n";
     std::cout << "  Connection:   " << (net.is_wifi ? "Wi-Fi (" + net.ssid + ")" : "Ethernet") << "\n";
+    if (net.is_wifi && net.signal_strength != "N/A") std::cout << "  Signal:       " << net.signal_strength << " dBm\n";
+    if (net.is_wifi && net.link_speed != "N/A") std::cout << "  Link Speed:   " << net.link_speed << " Mbps\n";
     if (speed.download_ok) std::cout << "  Download:     " << format_speed_bps(speed.download_mbps * 1e6) << "\n";
     if (speed.upload_ok) std::cout << "  Upload:       " << format_speed_bps(speed.upload_mbps * 1e6) << "\n";
     if (speed.ping_ok) std::cout << "  Latency:      " << format_ms(speed.latency_ms) << "\n";
